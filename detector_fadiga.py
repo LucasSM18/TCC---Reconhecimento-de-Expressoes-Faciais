@@ -6,7 +6,6 @@ from scipy.spatial import distance as dist
 from imutils.video import VideoStream
 from imutils import face_utils
 from threading import Thread
-from interface import eye_value
 import numpy as np
 import playsound
 import imutils
@@ -14,19 +13,47 @@ import time
 import dlib
 import cv2
 import matplotlib.pyplot as plt
+import raspyInterface
 
 # definir constantes
-ALARM = "alarm.wav"
+buzzerPin = 21
+GPIO.setup(buzzerPin,GPIO.OUT)
 WEBCAM = 0
-EYE_AR_THRESH = eye_value
+EYE_AR_THRESH = raspyInterface.selecionaOlho()
 EYE_AR_CONSEC_FRAMES = 100
 COUNTER = 0
 ALARM_ON = False
 
-def sound_alarm(path=ALARM):
-    # play an alarm sound
-    playsound.playsound(ALARM)
-
+def alarm():
+    #Toca o buzzer
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.3)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.3)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.1)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.3)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.5)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.3)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(0.2)
+    GPIO.output(buzzerPin,GPIO.HIGH)
+    time.sleep(0.5)
+    GPIO.output(buzzerPin,GPIO.LOW)
+    time.sleep(2)
 
 def eye_aspect_ratio(eye):
     # compute the euclidean distances between the two sets of
@@ -119,7 +146,7 @@ while True:
                 # ligar alarme
                 if not ALARM_ON:
                     ALARM_ON = True
-                    t = Thread(target=sound_alarm)
+                    t = Thread(target=alarm)
                     t.deamon = True
                     t.start()
 
