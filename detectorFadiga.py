@@ -3,16 +3,17 @@
 
 # importar pacotes necessários
 from scipy.spatial import distance as dist
-from imutils.video import VideoStream
 from imutils import face_utils
 from threading import Thread
 import numpy as np
-import playsound
 import imutils
+import RPi.GPIO as GPIO
 import time
 import dlib
 import cv2
 import matplotlib.pyplot as plt
+from picamera.array import PiRGBArray
+from picamera import PiCamera
 import raspyInterface
 
 # definir constantes
@@ -20,11 +21,11 @@ buzzerPin = 21
 GPIO.setup(buzzerPin,GPIO.OUT)
 WEBCAM = 0
 EYE_AR_THRESH = raspyInterface.selecionaOlho()
-EYE_AR_CONSEC_FRAMES = 100
+EYE_AR_CONSEC_FRAMES = 8
 COUNTER = 0
 ALARM_ON = False
 
-def alarm():
+def alarme():
     #Toca o buzzer
     GPIO.output(buzzerPin,GPIO.HIGH)
     time.sleep(0.3)
@@ -56,19 +57,17 @@ def alarm():
     time.sleep(2)
 
 def eye_aspect_ratio(eye):
-    # compute the euclidean distances between the two sets of
-    # vertical eye landmarks (x, y)-coordinates
+    # calculo das distancias entre 2 conjuntos de landmarks dos olhos vertical
     A = dist.euclidean(eye[1], eye[5])
     B = dist.euclidean(eye[2], eye[4])
 
-    # compute the euclidean distance between the horizontal
-    # eye landmark (x, y)-coordinates
+    # calculo das distancias entre 2 conjuntos de landmarks dos olhos horizontal
     C = dist.euclidean(eye[0], eye[3])
 
-    # compute the eye aspect ratio
+    # calcula o EAR
     ear = (A + B) / (2.0 * C)
 
-    # return the eye aspect ratio
+    # retorna o EAR
     return ear
 
 
@@ -83,21 +82,19 @@ predictor = dlib.shape_predictor("shape_predictor_68_face_landmarks.dat")
 
 # inicializar vídeo
 print("[INFO] inicializando streaming de vídeo...")
-vs = VideoStream(src=WEBCAM).start()
-time.sleep(1.0)
 
-# desenhar um objeto do tipo figure
-y = [None] * 100
-x = np.arange(0,100)
-fig = plt.figure()
-ax = fig.add_subplot(111)
-li, = ax.plot(x, y)
+camera = PiCamera()
+camera.resolution = (640, 480)
+camera.framerate = 32
+rawCapture = PiRGBArray(camera, size=(640, 480))
+
+time.sleep(0.5)
 
 # loop sobre os frames do vídeo
-while True:
-    frame = vs.read()
-    frame = imutils.resize(frame, width=800)
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
+    
+    image = frame.array
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
     # detectar faces (grayscale)
     rects = detector(gray, 0)
@@ -119,23 +116,8 @@ while True:
         # convex hull para os olhos
         leftEyeHull = cv2.convexHull(leftEye)
         rightEyeHull = cv2.convexHull(rightEye)
-        cv2.drawContours(frame, [leftEyeHull], -1, (0, 255, 0), 1)
-        cv2.drawContours(frame, [rightEyeHull], -1, (0, 255, 0), 1)
-
-        # salvar historico para plot
-        y.pop(0)
-        y.append(ear)
-
-            # update canvas
-        plt.xlim([0, 100])
-        plt.ylim([0, 0.4])
-        ax.relim()
-        ax.autoscale_view(True, True, True)
-        fig.canvas.draw()
-        plt.show(block=False)
-        li.set_ydata(y)
-        fig.canvas.draw()
-        time.sleep(0.01)
+        cv2.drawContours(image, [leftEyeHull], -1, (0, 255, 0), 1)
+        cv2.drawContours(image, [rightEyeHull], -1, (0, 255, 0), 1)
 
         # checar ratio x threshold
         if ear < EYE_AR_THRESH:
@@ -146,11 +128,11 @@ while True:
                 # ligar alarme
                 if not ALARM_ON:
                     ALARM_ON = True
-                    t = Thread(target=alarm)
+                    t = Thread(target=alarme)
                     t.deamon = True
                     t.start()
 
-                cv2.putText(frame, "[ALERTA] FADIGA!", (10, 30),
+                cv2.putText(image, "[ALERTA] FADIGA!", (10, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
         # caso acima do threshold, resetar o contador e desligar o alarme
@@ -159,21 +141,12 @@ while True:
             ALARM_ON = False
 
         # desenhar a proporção de abertura dos olhos
-        cv2.putText(frame, "EAR: {:.2f}".format(ear), (300, 30),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+        cv2.putText(image, "EAR: {:.2f}".format(ear), (300, 30),
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-    # show frame
-    cv2.imshow("Frame", frame)
+    # mostrar frame
+    cv2.imshow("Frame", image)
     key = cv2.waitKey(1) & 0xFF
-
-    # tecla para sair do script "q"
-    if key == ord("q"):
-        break
-
-    # tecla para parar o frame e mostrar o gráfico "w"
-    if key == ord("w"):
-        vs.stop()
-
-# clean
-cv2.destroyAllWindows()
-vs.stop()
+    
+    #limpa memória
+    rawCapture.truncate(0)
